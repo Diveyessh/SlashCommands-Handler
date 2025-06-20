@@ -1,50 +1,68 @@
-const client = require("../index");
-const { MessageEmbed, Collection } = require("discord.js")
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const cooldowns = new Map();
 
-client.on("interactionCreate", async (interaction) => {
-    // Slash Command Handling
-    if (interaction.isCommand()) {
-      const cmd = client.slashCommands.get(interaction.commandName);
-      if (!cmd) return interaction.followUp({ content: "An error has occured " });
+module.exports = {
+    name: 'interactionCreate',
+    async execute(interaction, client) {
+        if (!interaction.isChatInputCommand()) return;
 
-      if (!cooldowns.has(cmd.name)) {
-        const coll = new Collection();
-        cooldowns.set(cmd.name, coll);
-      }
-      const current_time = Date.now();
-      const time_stamps = cooldowns.get(cmd.name);
-      const cooldown_amount = cmd.cooldown * 1000;
-      if (time_stamps.has(interaction.user.id)) {
-        const expiration_time = time_stamps.get(interaction.user.id) + cooldown_amount;
-        if (current_time < expiration_time) {
-          const time_left = (expiration_time - current_time) / 1000;
-          const embed = new MessageEmbed().setColor("RED").setTitle(`${client.emoji.wrong} Too Fast!`).setDescription(`**You are in a cooldown! Please wait \`${time_left.toFixed(1)}\` seconds, To Use the command, \`${cmd.name}\` Again**!`).setFooter(`⚡ Powered by Azury.live`)
-          return interaction.reply({ embeds: [embed] });
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+
+        // Cooldown Handling
+        if (!cooldowns.has(command.data.name)) {
+            cooldowns.set(command.data.name, new Map());
         }
-      }
-      time_stamps.set(interaction.user.id, current_time);
-      setTimeout(() => time_stamps.delete(interaction.user.id), cooldown_amount);
 
-      await interaction.deferReply({ ephemeral: false }).catch(() => {});
-      const args = [];
+        const now = Date.now();
+        const timestamps = cooldowns.get(command.data.name);
+        const cooldownAmount = (command.cooldown || 3) * 1000;
 
-      for (let option of interaction.options.data) {
-        if (option.type === "SUB_COMMAND") {
-          if (option.name) args.push(option.name);
-          option.options.forEach((x) => {
-            if (x.value) args.push(x.value);
-          });
-        } else if (option.value) args.push(option.value);
-      }
-      interaction.member = interaction.guild.members.cache.get(interaction.user.id);
-      cmd.run(client, interaction, args);
+        if (timestamps.has(interaction.user.id)) {
+            const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
+            if (now < expirationTime) {
+                const timeLeft = (expirationTime - now) / 1000;
+
+                const cooldownEmbed = new EmbedBuilder()
+                    .setColor(client.config.color?.error || 0xff0000)
+                    .setTitle('⏳ Whoa there!')
+                    .setDescription(`You're using commands too fast!\nWait **${timeLeft.toFixed(1)}s** to use \`/${command.data.name}\` again`)
+                    .setFooter({ text: 'dsc.gg/zyra', iconURL: client.user.displayAvatarURL() });
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel('Need Help?')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL('https://dsc.gg/zyra')
+                );
+
+                return interaction.reply({ 
+                    embeds: [cooldownEmbed], 
+                    components: [row],
+                    ephemeral: true 
+                });
+            }
+        }
+
+        timestamps.set(interaction.user.id, now);
+        setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+
+        // Execute Command
+        try {
+            await command.execute(interaction, client);
+        } catch (error) {
+            console.error(error);
+
+            const errorEmbed = new EmbedBuilder()
+                .setColor(client.config.color?.error || 0xff0000)
+                .setTitle('💥 Explosion Detected!')
+                .setDescription('Our team of gnomes is working to fix this!')
+                .setImage('https://i.imgur.com/yP2A9tf.gif');
+
+            await interaction.reply({ 
+                embeds: [errorEmbed],
+                ephemeral: true 
+            });
+        }
     }
-
-    // Context Menu Handling
-    if (interaction.isContextMenu()) {
-        await interaction.deferReply({ ephemeral: false });
-        const command = client.slashCommands.get(interaction.commandName);
-        if (command) command.run(client, interaction);
-    }
-});
+};

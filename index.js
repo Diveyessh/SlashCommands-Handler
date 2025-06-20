@@ -1,59 +1,39 @@
-const { Client, Collection } = require("discord.js");
-const chalk = require("chalk");
-const colors = require("colors")
-const Cluster = require('discord-hybrid-sharding');
+require('dotenv').config();
+const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
+const chalk = require('chalk');
+const mongoose = require('mongoose');
+const config = require('./config.json');
+
 const client = new Client({
-    shards: Cluster.data.SHARD_LIST, 
-    shardCount: Cluster.data.TOTAL_SHARDS, 
-    intents: 32767,
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
+    ],
+    partials: [Partials.Message, Partials.Channel]
 });
-module.exports = client;
 
-// Global Variables
+// Vibrant Console Logging
+console.log(chalk.hex('#5865F2').bold(`
+╔════════════════════════════╗
+║      Zyra Bot Starting     ║
+╚════════════════════════════╝
+`));
+
 client.commands = new Collection();
-client.slashCommands = new Collection();
-const fs = require(`fs`);
-client.config = require("./config.json");
-client.cluster = new Cluster.Client(client)
+client.cooldowns = new Collection();
+client.config = config;
 
-global.config = require("./config.json");
-
-// Initializing the project
-require("./handler")(client);
-
-
-/*        WEB & BOT SERVER         ¦¦        WEB & BOT SERVER        */ 
-if(client.config.hostingweb == true) {
-require("./webport")();
+// Database Connection
+if (config.mongoDB.is_enabled) {
+    mongoose.connect(process.env.MONGO_URI || config.mongoDB.mongoURL)
+        .then(() => console.log(chalk.green('✅ MongoDB ') + chalk.white('Connection Established')))
+        .catch(err => console.error(chalk.red('❌ MongoDB '), chalk.white(err)));
 }
-client.login(process.env.token || client.config.token)
 
-/*           ANTI CRASHING            ¦¦           ANTI CRASHING           */ 
-process.on('unhandledRejection', (reason, p) => {
-    console.log('\n\n\n\n\n[🚩 Anti-Crash] unhandled Rejection:'.toUpperCase().red.dim);
-    console.log(reason.stack.yellow.dim ? String(reason.stack).yellow.dim : String(reason).yellow.dim);
-    console.log('=== unhandled Rejection ===\n\n\n\n\n'.toUpperCase().red.dim);
-  });
-  process.on("uncaughtException", (err, origin) => {
-    console.log('\n\n\n\n\n\n[🚩 Anti-Crash] uncaught Exception'.toUpperCase().red.dim);
-    console.log(err.stack.yellow.dim ? err.stack.yellow.dim : err.yellow.dim)
-    console.log('=== uncaught Exception ===\n\n\n\n\n'.toUpperCase().red.dim);
-  })
-  process.on('uncaughtExceptionMonitor', (err, origin) => {
-    console.log('[🚩 Anti-Crash] uncaught Exception Monitor'.toUpperCase().red.dim);
-  });
-  process.on('beforeExit', (code) => {
-    console.log('\n\n\n\n\n[🚩 Anti-Crash] before Exit'.toUpperCase().red.dim);
-    console.log(code.yellow.dim);
-    console.log('=== before Exit ===\n\n\n\n\n'.toUpperCase().red.dim);
-  });
-  process.on('exit', (code) => {
-    console.log('\n\n\n\n\n[🚩 Anti-Crash] exit'.toUpperCase().red.dim);
-    console.log(code.yellow.dim);
-    console.log('=== exit ===\n\n\n\n\n'.toUpperCase().red.dim);
-  });
-  process.on('multipleResolves', (type, promise, reason) => {
-    console.log('\n\n\n\n\n[🚩 Anti-Crash] multiple Resolves'.toUpperCase().red.dim);
-    console.log(type, promise, reason.yellow.dim);
-    console.log('=== multiple Resolves ===\n\n\n\n\n'.toUpperCase().red.dim);
-  });
+require('./handler')(client);
+
+client.login(process.env.TOKEN || config.token)
+    .then(() => console.log(chalk.hex('#57F287')('🔑 Logged in successfully!')))
+    .catch(err => console.error(chalk.red('🔴 Login failed:'), err));
